@@ -1,0 +1,15 @@
+{
+  "name": "mineazy-whatsapp",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "backend:install": "cd backend && npm install",
+    "frontend:install": "cd frontend && npm install",
+    "install:all": "npm run backend:install && npm run frontend:install",
+    "backend:seed": "cd backend && node src/seed.js",
+    "backend:dev": "cd backend && node --watch src/index.js",
+    "backend:start": "cd backend && node src/index.js",
+    "frontend:dev": "cd frontend && npx vite",
+    "frontend:build": "cd frontend && npx vite build"
+  }
+}

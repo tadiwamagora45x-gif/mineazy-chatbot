@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-900 text-white antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.2);
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-surface-600/80 backdrop-blur-xl border border-white/5 rounded-2xl;
+  }
+  .glass-card {
+    @apply bg-surface-600/60 backdrop-blur-lg border border-white/[0.06] rounded-2xl shadow-card hover:border-brand/20 transition-all duration-300;
+  }
+  .glass-input {
+    @apply w-full px-4 py-2.5 bg-surface-800 border border-white/[0.06] rounded-xl text-sm text-white placeholder-mute-dark 
+           outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/30 transition-all duration-200;
+  }
+  .btn-primary {
+    @apply bg-brand text-surface-900 px-5 py-2.5 rounded-xl font-semibold text-sm 
+           hover:bg-brand-500 hover:shadow-glow active:scale-[0.98] transition-all duration-200;
+  }
+  .btn-secondary {
+    @apply bg-white/[0.04] border border-brand/30 text-brand px-5 py-2.5 rounded-xl font-semibold text-sm
+           hover:bg-brand/10 hover:border-brand/60 transition-all duration-200;
+  }
+  .badge-status {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand via-brand-400 to-white;
+  }
+}

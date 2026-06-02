@@ -1,0 +1,36 @@
+ABCDC0008     DUCELLIER BATTERY 631                        IT       65.59    75.76
+ABF500        ALUMINIUM BRAZING FLUX 500G                  IT        6.12     7.07
+ACBDC0001     DUCELLER BATTERY 621                         IT       61.22    70.71
+ACBDC0002     DUCELLER BATTERY 622                                  61.22    70.71
+ACBDC0003     DUCELLER BATTERY 628                                  69.97    80.81
+ACBDC0004     DUCELLER BATTERY 638                                  74.34    85.86
+ACBDC0005     DUCELLER BATTERY 652                                   96.2 111.11
+ACBDC0006     DUCELLER SOLAR BATTERY PB50                           74.34    85.86
+ACBDC0007     DUCELLER SOLAR BATTERY PB70                           90.95 105.05
+ACBDC0009     DUCELLIER BATTERY 650                                 78.71    90.91
+ACG001        BARBED WIRE 1.8MM 50KG                                69.97    80.81
+ACG0010       TYING WIRE 1.8MM 1KG                                   1.75     2.02
+ACG0013       TYING WIRE 3.2MM 5KG                                   6.56     7.58
+ACG0014       TYING WIRE 3.2MM 50KG                                 61.22    70.71
+ACG003        FIELD FENCE 1.8M X 30M                                 37.6    43.43
+ACG004        FIELD FENCE 1.8M X 60M                              131.19 151.52
+ACG005        TYING WIRE 2MM 50KG                                   61.22    70.71
+ACG006        TYING WIRE 2MM 5KG                                     6.56     7.58
+ACG007        TYING WIRE 4MM 50KG                                   65.59    75.76
+ACG008        TYING WIRE 4MM 5KG                                     6.56     7.58
+ACG01250      WIRE GALV 1KG 2MM LOW CARB                             1.75     2.02
+ACG1012       FIELD FENCE 1.5M X30M                                 31.48    36.36
+ACG1025       BARBED WIRE 25KG                                      46.35    53.54
+ACG1026       BARBED WIRE 32 KG                                     69.97    80.81
+ACG1027       BARBED WIRE 2MM 50 KG                                 69.97    80.81
+ACGFF15X100   FIELD FENCE 1.5MTRS X 100MTRS                       104.94 121.21
+ACGFF18X100   FIELD FENCE 1.8MTRS X100MTRS                        148.68 171.72
+ACGFP183250   FENCE PANEL (WITHOUT POST) H 1.83M X L2.5M            28.86    33.33
+ACGFP223250   FENCE PANEL (WITHOUT POST) H 2.23M X L2.5M            34.98     40.4
+ACGP233       SQUARE POST 60MM X 60MM X 1.6MM 2.33MTRS              17.49     20.2
+ACGP273       SQUARE POST 60MM X 60MM X 1.6MM 2.73MTRS              20.11    23.23
+ACGS1843      STAMPMILL SCREEN SZ 1                                 26.23     30.3
+ACGS18431     STAMPMILL SCREEN SZ 1(HALF)                           13.12    15.15
+ACGS1845      SCREEN SZ 2 STAMPMILL                                 26.23     30.3
+ACGSP001      PANEL FENCE (CLAMP&BOLTS)                              0.31     0.36
+AGCX1012      RAZOR WIRE 7KG                                        12.24    14.14
