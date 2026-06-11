@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Eye, CheckCircle, Ticket, AlertCircle } from 'lucide-react';
+import { Eye, CheckCircle, Ticket, AlertCircle, UserPlus, ExternalLink, MessageSquare } from 'lucide-react';
 import api from '../api';
 
 const statusC = {
@@ -19,6 +19,7 @@ export default function Tickets() {
   const [tickets, setTickets] = useState([]);
   const [filter, setFilter] = useState('');
   const [detail, setDetail] = useState(null);
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
 
   useEffect(() => {
     const params = {};
@@ -26,19 +27,32 @@ export default function Tickets() {
     api.getTickets(params).then(setTickets).catch(console.error);
   }, [filter]);
 
-  const updateStatus = async (id, status) => {
-    await api.updateTicket(id, { status });
+  const startTicket = async (id) => {
+    await api.updateTicket(id, { assigned_to: currentUser.id, status: 'in_progress' });
+    const params = {};
+    if (filter) params.status = filter;
+    api.getTickets(params).then(setTickets).catch(console.error);
+  };
+
+  const resolveTicket = async (id) => {
+    await api.updateTicket(id, { status: 'resolved' });
     setDetail(null);
     const params = {};
     if (filter) params.status = filter;
     api.getTickets(params).then(setTickets).catch(console.error);
   };
 
+  const openChat = (ticket) => {
+    if (ticket.customer_phone) {
+      window.open(`https://wa.me/${ticket.customer_phone}`, '_blank');
+    }
+  };
+
   return (
     <div className="animate-fade-in">
       <div className="mb-6">
         <h2 className="text-xl font-bold text-white">Support Tickets</h2>
-        <p className="text-mute-dark text-sm mt-0.5">Manage customer support requests</p>
+        <p className="text-mute-dark text-sm mt-0.5">Customer escalation requests</p>
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -67,17 +81,32 @@ export default function Tickets() {
                   <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${priorityC[t.priority]}`}>{t.priority}</span>
                 </div>
                 <p className="text-sm text-mute line-clamp-2 mt-1">{t.description}</p>
-                <div className="flex items-center gap-4 mt-2.5 text-xs text-mute-dark">
+                <div className="flex items-center gap-4 mt-2.5 text-xs text-mute-dark flex-wrap">
                   <span className="font-medium text-white">{t.customer_name || 'Unknown'}</span>
                   {t.customer_phone && <span>{t.customer_phone}</span>}
+                  {t.assigned_name && (
+                    <span className="text-brand">Assigned: {t.assigned_name === currentUser.name ? 'You' : t.assigned_name}</span>
+                  )}
                   <span className="ml-auto">{new Date(t.created_at).toLocaleDateString()}</span>
                 </div>
               </div>
-              <div className="flex gap-1 flex-shrink-0">
-                {t.status !== 'resolved' && (
-                  <button onClick={() => updateStatus(t.id, 'resolved')}
-                    className="p-2 text-green-400 hover:bg-green-500/10 rounded-lg transition-colors" title="Mark Resolved">
+              <div className="flex gap-1 flex-shrink-0 flex-col items-end">
+                {t.status === 'open' && (
+                  <button onClick={() => startTicket(t.id)}
+                    className="btn-primary inline-flex items-center gap-1.5 text-xs py-1.5 px-3 mb-1">
+                    <UserPlus className="w-3 h-3" /> Start
+                  </button>
+                )}
+                {t.status === 'in_progress' && t.assigned_to === currentUser.id && (
+                  <button onClick={() => resolveTicket(t.id)}
+                    className="p-2 text-green-400 hover:bg-green-500/10 rounded-lg transition-colors mb-1" title="Mark Resolved">
                     <CheckCircle className="w-4 h-4" />
+                  </button>
+                )}
+                {t.customer_id && (
+                  <button onClick={() => openChat(t)}
+                    className="btn-secondary inline-flex items-center gap-1.5 text-xs py-1.5 px-3">
+                    <MessageSquare className="w-3 h-3" /> Open Chat
                   </button>
                 )}
                 <button onClick={() => setDetail(t)} className="p-2 text-mute-dark hover:text-white hover:bg-white/[0.05] rounded-lg transition-colors" title="View">
@@ -122,10 +151,20 @@ export default function Tickets() {
                 </div>
               )}
             </div>
-            <div className="px-6 py-4 border-t border-white/[0.04] flex gap-2 justify-end">
-              {detail.status !== 'resolved' && (
-                <button onClick={() => updateStatus(detail.id, 'resolved')} className="btn-primary inline-flex items-center gap-1.5 text-sm py-2">
-                  <CheckCircle className="w-4 h-4" /> Mark Resolved
+            <div className="px-6 py-4 border-t border-white/[0.04] flex gap-2 justify-end flex-wrap">
+              {detail.status === 'open' && (
+                <button onClick={() => { startTicket(detail.id); }} className="btn-primary inline-flex items-center gap-1.5 text-sm py-2">
+                  <UserPlus className="w-4 h-4" /> Start Ticket
+                </button>
+              )}
+              {detail.status === 'in_progress' && (
+                <button onClick={() => resolveTicket(detail.id)} className="btn-primary inline-flex items-center gap-1.5 text-sm py-2">
+                    <CheckCircle className="w-4 h-4" /> Completed
+                </button>
+              )}
+              {detail.customer_id && (
+                <button onClick={() => openChat(detail)} className="btn-secondary inline-flex items-center gap-1.5 text-sm py-2">
+                  <ExternalLink className="w-4 h-4" /> Open Chat
                 </button>
               )}
               <button onClick={() => setDetail(null)} className="btn-secondary text-sm py-2">Close</button>

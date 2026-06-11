@@ -1,7 +1,83 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { prepare } from './db.js';
+import Fuse from 'fuse.js';
 
-const SYSTEM_PROMPT = `You are the Mineazy Chatbot, a WhatsApp Business Assistant for a hardware and industrial supplies company. You help customers find products, check prices, and request quotations.
+let productCache = null;
+let fuse = null;
+
+function loadProductCache() {
+  if (productCache) return;
+
+  const products = prepare('SELECT name, category, price, stock FROM products WHERE active = 1').all();
+
+  const index = products.map(p => {
+    // Strip item code, extract core words
+    const cleanName = p.name.replace(/^[A-Z0-9]+ - /, '').replace(/^[A-Z0-9]+\s+-\s+/, '');
+    // Create searchable tokens: name + category + individual words
+    const words = cleanName.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+    const uniqueWords = [...new Set(words)];
+
+    return {
+      name: p.name,
+      cleanName,
+      category: p.category,
+      price: p.price,
+      stock: p.stock,
+      keywords: uniqueWords.join(' '),
+    };
+  });
+
+  fuse = new Fuse(index, {
+    keys: [
+      { name: 'cleanName', weight: 4 },
+      { name: 'keywords', weight: 2 },
+      { name: 'category', weight: 1 },
+    ],
+    threshold: 0.45,
+    distance: 100,
+    minMatchCharLength: 2,
+    includeScore: true,
+    shouldSort: true,
+  });
+
+  productCache = index;
+}
+
+function normalizeText(text) {
+  // Remove common suffixes
+  return text
+    .replace(/s\b/g, '')       // plurals: bungas -> bunga
+    .replace(/es\b/g, '')      // plurals: boxes -> box
+    .replace(/ies\b/g, 'y')    // plurals: batteries -> battery
+    .replace(/ing\b/g, '')     // gerunds
+    .replace(/ed\b/g, '')      // past tense
+    .replace(/er\b/g, '')      // comparative
+    .trim();
+}
+
+function getCompanyInfo() {
+  const settings = prepare('SELECT * FROM settings').all();
+  const info = {};
+  for (const s of settings) info[s.key] = s.value;
+  return info;
+}
+
+function buildSystemPrompt() {
+  const c = getCompanyInfo();
+
+  return `You are the Mineazy Chatbot, a WhatsApp Business Assistant for ${c.company_name || 'a hardware and industrial supplies company'}.
+
+Company Info:
+Name: ${c.company_name || 'N/A'}
+Phone: ${c.company_phone || 'N/A'}
+Email: ${c.company_email || 'N/A'}
+Address: ${c.company_address || 'N/A'}
+Hours: ${c.business_hours || 'Mon-Fri 8am-5pm, Sat 8am-12pm'}
+${c.company_description ? `About: ${c.company_description}` : ''}
+${c.company_tagline ? `Tagline: ${c.company_tagline}` : ''}
+
+When asked about the company, location, hours, or contact info, respond using ONLY the company info above.
+When asked about delivery, say delivery is available across Zambia within 2-5 business days.
 
 When listing products, use this EXACT format with proper spacing:
 
@@ -9,11 +85,7 @@ When listing products, use this EXACT format with proper spacing:
 PRICE: $XX.XX
 STOCK: XX units
 
-*PRODUCT NAME*
-PRICE: $XX.XX
-STOCK: XX units
-
-Each product separated by a blank line. Product names in *bold* markers. End with: "Would you like a quotation on any of these?"
+Number each product (1. 2. 3.)
 
 RULES:
 1. Be professional, concise, and helpful.
@@ -22,8 +94,8 @@ RULES:
 4. If a customer requests a quotation, include QUOTE_REQUEST in your response and ask for: name, company, phone number, product, and quantity.
 5. If you cannot answer or nothing matches, offer to connect to a human. Include HUMAN_NEEDED.
 6. If the customer types "human", "agent", "salesperson", or "support", respond warmly and include HUMAN_NEEDED.
-7. Never make up prices or stock levels.
-8. Delivery is available across Zambia within 2-5 business days.`;
+7. Never make up prices or stock levels.`;
+}
 
 let genAI = null;
 let model = null;
@@ -39,122 +111,91 @@ export function initGemini(apiKey) {
 }
 
 export function searchProducts(query) {
-  if (!query || query.trim().length < 2) return { results: [], suggestion: null };
+  if (!query || query.trim().length < 2) return { results: [], suggestion: null, confidence: 0 };
 
-  const keywords = query.toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length > 1);
+  loadProductCache();
 
-  if (keywords.length === 0) return { results: [], suggestion: null };
+  const originalQuery = query.trim();
+  const normalizedQuery = normalizeText(originalQuery.toLowerCase());
 
-  // First: exact keyword search
-  const exactPlaceholders = keywords.map(() => 'name LIKE ?').join(' OR ');
-  const exactParams = keywords.map(k => `%${k}%`);
-  const exactSql = `SELECT name, category, price, stock FROM products WHERE active = 1 AND (${exactPlaceholders}) ORDER BY price LIMIT 30`;
+  // Step 1: Try exact match with Fuse.js
+  let results = fuse.search(originalQuery, { limit: 20 });
 
-  try {
-    let results = prepare(exactSql).all(exactParams);
-
-    // Score results
-    let scored = scoreResults(results, keywords);
-
-    // If no results, try fuzzy matching each keyword
-    if (scored.length === 0) {
-      for (const kw of keywords) {
-        if (kw.length < 3) continue;
-        const first = kw[0];
-        const last = kw[kw.length - 1];
-
-        // Build a pattern: words that start with same letter and end with same letter
-        const fuzzySql = `SELECT DISTINCT name, category, price, stock FROM products WHERE active = 1 AND (name LIKE ? OR name LIKE ? OR name LIKE ?) ORDER BY price LIMIT 30`;
-        const fuzzyParams = [`% ${kw}%`, `%${first}%${last}%`, `%${kw.slice(0, 2)}%`];
-
-        const fuzzyResults = prepare(fuzzySql).all(fuzzyParams);
-        if (fuzzyResults.length > 0) {
-          const fuzzyScored = scoreResults(fuzzyResults, keywords);
-          // Find the closest matching word in product names for this keyword
-          const closestMatch = findClosestWord(kw, fuzzyResults);
-
-          return {
-            results: fuzzyScored.slice(0, 20),
-            suggestion: `Did you mean *${closestMatch}*?`,
-            original: kw,
-          };
-        }
-      }
-
-      // Last resort: search by individual characters
-      if (keywords.length === 1 && keywords[0].length >= 3) {
-        const kw = keywords[0];
-        const chars = kw.split('').join('%');
-        const charSql = `SELECT name, category, price, stock FROM products WHERE active = 1 AND name LIKE ? ORDER BY price LIMIT 20`;
-        const charResults = prepare(charSql).all([`%${chars}%`]);
-        if (charResults.length > 0) {
-          const charScored = scoreResults(charResults, [kw]);
-          const closest = findClosestWord(kw, charResults);
-          return {
-            results: charScored.slice(0, 20),
-            suggestion: `Did you mean *${closest}*?`,
-            original: kw,
-          };
-        }
-      }
-
-      return { results: [], suggestion: null };
-    }
-
-    scored.sort((a, b) => b.score - a.score);
-    return { results: scored.slice(0, 20), suggestion: null };
-  } catch (e) {
-    console.error('Product search error:', e.message);
-    return { results: [], suggestion: null };
-  }
-}
-
-function scoreResults(results, keywords) {
-  return results.map(r => {
-    const nameLower = r.name.toLowerCase();
-    const nameWords = nameLower.split(/\s+/);
-    let score = 0;
-    for (const kw of keywords) {
-      if (nameLower.includes(kw)) score += 1;
-      if (nameWords.includes(kw)) score += 2;
-      if (nameLower.startsWith(kw)) score += 3;
-    }
-    return { ...r, score };
-  });
-}
-
-function findClosestWord(keyword, results) {
-  // Find the closest matching word from product names
-  const kw = keyword.toLowerCase();
-  let best = null;
-  let bestScore = 0;
-
-  for (const r of results.slice(0, 30)) {
-    const nameLower = r.name.toLowerCase();
-    const words = nameLower.split(/\s+/);
-    for (const w of words) {
-      if (w.length < 2) continue;
-      let score = 0;
-      // Same first letter
-      if (w[0] === kw[0]) score += 3;
-      // Same last letter
-      if (w[w.length - 1] === kw[kw.length - 1]) score += 2;
-      // Same length (approximate)
-      if (Math.abs(w.length - kw.length) <= 2) score += 1;
-      // Contains at least 2 chars from keyword
-      const commonChars = [...new Set(kw)].filter(c => w.includes(c)).length;
-      score += commonChars;
-
-      if (score > bestScore) {
-        bestScore = score;
-        best = w;
-      }
+  // Step 2: If no good results, try with normalized (de-pluralized) query
+  if (results.length === 0 || results[0].score > 0.3) {
+    const normResults = fuse.search(normalizedQuery, { limit: 20 });
+    if (normResults.length > 0 && (results.length === 0 || normResults[0].score < results[0].score)) {
+      results = normResults;
     }
   }
-  return best || keyword;
+
+  // Step 3: If still poor, split into words and search each
+  if (results.length === 0 || results[0].score > 0.35) {
+    const words = originalQuery.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    if (words.length > 1) {
+      for (const word of words) {
+        const wordResults = fuse.search(normalizeText(word), { limit: 10 });
+        for (const r of wordResults) {
+          if (r.score < 0.35 && !results.find(e => e.item.name === r.item.name)) {
+            results.push(r);
+          }
+        }
+      }
+      // Re-sort by score
+      results.sort((a, b) => a.score - b.score);
+      results = results.slice(0, 20);
+    }
+  }
+
+  // Extract best score for confidence
+  const bestScore = results.length > 0 ? results[0].score : 1;
+  const confidence = Math.round((1 - bestScore) * 100);
+
+  // Map back to product format
+  let products = results.map(r => ({
+    name: r.item.name,
+    cleanName: r.item.cleanName,
+    category: r.item.category,
+    price: r.item.price,
+    stock: r.item.stock,
+    score: r.score,
+  }));
+
+  // Step 4: If confidence below 60%, try to find the closest matching product name
+  if (confidence < 60 && products.length > 0) {
+    const fuzzyResults = fuse.search(originalQuery, { limit: 5 });
+    if (fuzzyResults.length > 0) {
+      const bestMatch = fuzzyResults[0].item.cleanName;
+      const queryClean = originalQuery
+        .replace(/^i'?m looking for\s*/i, '')
+        .replace(/^do you (have|sell|stock)\s*/i, '')
+        .trim();
+
+      return {
+        results: products.slice(0, 15),
+        suggestion: `Did you mean *${bestMatch}*?`,
+        confidence,
+      };
+    }
+  }
+
+  // Step 5: If low confidence and few results, find better suggestion
+  if (confidence < 40 && products.length <= 3) {
+    const broaderResults = fuse.search(originalQuery, { limit: 3, threshold: 0.6 });
+    if (broaderResults.length > 0 && broaderResults[0].item.cleanName !== products[0]?.cleanName) {
+      return {
+        results: products.slice(0, 10),
+        suggestion: `Did you mean *${broaderResults[0].item.cleanName}*?`,
+        confidence,
+      };
+    }
+  }
+
+  return {
+    results: products,
+    suggestion: confidence < 70 && products.length > 0 ? `Showing closest matches:` : null,
+    confidence,
+  };
 }
 
 export async function getAIResponse(userMessage) {
@@ -174,9 +215,23 @@ export async function getAIResponse(userMessage) {
   const quoteWords = ['quote', 'quotation', 'price', 'how much', 'cost', 'buy', 'purchase', 'order'];
   const wantsQuote = quoteWords.some(w => msgLower.includes(w));
 
-  // Check for greetings
-  if (msgLower.match(/^(hi|hey|hello|good morning|good afternoon|good evening)\b/)) {
-    return "Welcome to Mineazy Chatbot! I can help you find hardware and industrial supplies, check prices and availability, or prepare a quotation. What are you looking for today?";
+  // Check for greetings or company info requests
+  const infoWords = ['who are you', 'about', 'location', 'address', 'hours', 'contact', 'phone number', 'email', 'where are you', 'company info', 'business hours', 'open'];
+  if (msgLower.match(/^(hi|hey|hello|good morning|good afternoon|good evening)\b/) || infoWords.some(w => msgLower.includes(w))) {
+    const c = getCompanyInfo();
+    if (msgLower.match(/^(hi|hey|hello|good morning|good afternoon|good evening)\b/) && !infoWords.some(w => msgLower.includes(w))) {
+      return `Welcome to ${c.company_name || 'Mineazy Chatbot'}! I can help you find hardware and industrial supplies, check prices and availability, or prepare a quotation. What are you looking for today?`;
+    }
+    // Company info response
+    const infoParts = [];
+    if (c.company_name) infoParts.push(`*${c.company_name}*`);
+    if (c.company_tagline) infoParts.push(`_${c.company_tagline}_`);
+    if (c.company_description) infoParts.push(c.company_description);
+    if (c.company_phone) infoParts.push(`Phone: ${c.company_phone}`);
+    if (c.company_email) infoParts.push(`Email: ${c.company_email}`);
+    if (c.company_address) infoParts.push(`Address: ${c.company_address}`);
+    if (c.business_hours) infoParts.push(`Hours: ${c.business_hours}`);
+    return infoParts.join('\n');
   }
 
   // If we have matching products, use Gemini or fallback
@@ -185,11 +240,11 @@ export async function getAIResponse(userMessage) {
 
     if (model) {
       const productLines = results.slice(0, 6).map((p, i) => {
-        const displayName = p.name.replace(/^[A-Z0-9]+ - /, '').replace(/^[A-Z0-9]+\s+-\s+/, '');
+        const displayName = p.cleanName || p.name.replace(/^[A-Z0-9]+ - /, '').replace(/^[A-Z0-9]+\s+-\s+/, '');
         return `${i + 1}. ${displayName} | Price: $${p.price.toFixed(2)} | Stock: ${p.stock}`;
       }).join('\n');
 
-      const prompt = `${SYSTEM_PROMPT}\n\nAvailable matching products:\n${productLines}\n\n${results.length > 6 ? `(${results.length} total matches, showing top 6)` : ''}\n\nCustomer message: "${msg}"\n\nAssistant:`;
+      const prompt = `${buildSystemPrompt()}\n\nAvailable matching products:\n${productLines}\n\n${results.length > 6 ? `(${results.length} total matches, showing top 6)` : ''}\n\nCustomer message: "${msg}"\n\nAssistant:`;
 
       try {
         const result = await model.generateContent(prompt);
@@ -203,7 +258,7 @@ export async function getAIResponse(userMessage) {
     const top = results.slice(0, 4);
     let response = `${intro}\n\n`;
     top.forEach((p, i) => {
-      const name = p.name.replace(/^[A-Z0-9]+ - /, '').replace(/^[A-Z0-9]+\s+-\s+/, '');
+      const name = p.cleanName || p.name.replace(/^[A-Z0-9]+ - /, '').replace(/^[A-Z0-9]+\s+-\s+/, '');
       response += `${i + 1}. *${name}*\nPRICE: $${p.price.toFixed(2)}\nSTOCK: ${p.stock} units\n\n`;
     });
     if (results.length > 4) {
@@ -217,7 +272,7 @@ export async function getAIResponse(userMessage) {
 
   // No products found
   if (model) {
-    const prompt = `${SYSTEM_PROMPT}\n\nCustomer message: "${msg}"\n\nNo products were found matching this query in the catalog. Respond helpfully and ask them to be more specific or try different keywords.`;
+    const prompt = `${buildSystemPrompt()}\n\nCustomer message: "${msg}"\n\nNo products were found matching this query in the catalog. Respond helpfully and ask them to be more specific or try different keywords.`;
     try {
       const result = await model.generateContent(prompt);
       return result.response.text();

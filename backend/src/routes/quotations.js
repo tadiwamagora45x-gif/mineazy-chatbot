@@ -36,14 +36,24 @@ router.get('/:id', (req, res) => {
   res.json(quote);
 });
 
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   const { status, notes } = req.body;
   const quote = prepare('SELECT * FROM quotation_requests WHERE id = ?').get(req.params.id);
   if (!quote) return res.status(404).json({ error: 'Quotation not found' });
 
   prepare(
     'UPDATE quotation_requests SET status = COALESCE(?, status), notes = COALESCE(?, notes), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-  ).run(status, notes, req.params.id);
+  ).run(status || null, notes || null, req.params.id);
+
+  // If marked as completed, send receipt to customer
+  if (status === 'completed') {
+    try {
+      const { notifyCustomerQuoteComplete } = await import('../whatsapp.js');
+      await notifyCustomerQuoteComplete(req.params.id);
+    } catch (e) {
+      console.error('Failed to notify customer:', e.message);
+    }
+  }
 
   res.json({ message: 'Quotation updated' });
 });

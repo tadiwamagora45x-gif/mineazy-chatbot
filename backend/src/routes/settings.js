@@ -1,10 +1,11 @@
 import express from 'express';
 import { prepare } from '../db.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
 router.use(authenticateToken);
+router.use(requireAdmin);
 
 router.get('/', (req, res) => {
   const settings = prepare('SELECT * FROM settings').all();

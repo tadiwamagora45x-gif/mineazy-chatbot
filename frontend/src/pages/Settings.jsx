@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Building2, Globe, Phone, Mail, MapPin, Clock, AlertCircle, CheckCircle } from 'lucide-react';
+import { Save, Building2, Globe, Phone, Mail, MapPin, Clock, AlertCircle, CheckCircle, Trash2 } from 'lucide-react';
 import api from '../api';
 
 export default function Settings() {
@@ -7,6 +7,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [clearing, setClearing] = useState(null);
 
   useEffect(() => {
     api.getSettings().then(s => { setSettings(s); setDirty(false); }).catch(console.error);
@@ -24,6 +25,19 @@ export default function Settings() {
       alert('Failed to save: ' + err.message);
     }
     setSaving(false);
+  };
+
+  const clearData = async (label, table) => {
+    if (!confirm(`Delete ALL ${label.toLowerCase()}? This cannot be undone.`)) return;
+    setClearing(label);
+    try {
+      await api.clearData(table);
+      alert(`Cleared all ${label.toLowerCase()} successfully`);
+      window.dispatchEvent(new Event('data-cleared'));
+    } catch (e) {
+      alert('Failed: ' + e.message);
+    }
+    setClearing(null);
   };
 
   const update = (key, value) => {
@@ -111,6 +125,35 @@ export default function Settings() {
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400" />{status}
               </span>
             </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="glass-panel p-6 mt-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/10">
+            <Trash2 className="w-5 h-5 text-red-400" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-white">Data Management</h3>
+            <p className="text-sm text-mute-dark">Clear records — this cannot be undone</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {[
+            { label: 'Orders & Quotations', table: 'quotation_requests' },
+            { label: 'Support Tickets', table: 'support_tickets' },
+            { label: 'Conversations & Messages', table: 'conversations' },
+          ].map(({ label, table }) => (
+            <button
+              key={table}
+              onClick={() => clearData(label, table)}
+              disabled={clearing !== null}
+              className="px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-semibold hover:bg-red-500/20 transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4 inline mr-1.5" />
+              {clearing === label ? 'Clearing...' : `Clear ${label}`}
+            </button>
           ))}
         </div>
       </div>

@@ -141,10 +141,34 @@ async function initDb() {
 
 function saveDb() {
   if (db) {
-    const data = db.export();
-    fs.writeFileSync(DB_PATH, Buffer.from(data));
+    try {
+      const data = db.export();
+      const buf = Buffer.from(data);
+      // Atomic write: write to temp file first, then rename
+      const tmp = DB_PATH + '.tmp';
+      fs.writeFileSync(tmp, buf);
+      if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
+      fs.renameSync(tmp, DB_PATH);
+    } catch (e) {
+      console.error('DB save error:', e.message);
+    }
   }
 }
+
+// Backup save every 60 seconds
+setInterval(() => {
+  if (db) {
+    try {
+      const bak = DB_PATH + '.backup';
+      fs.writeFileSync(bak, Buffer.from(db.export()));
+    } catch (e) {}
+  }
+}, 60000);
+
+// Save on process exit
+process.on('SIGINT', () => { saveDb(); process.exit(); });
+process.on('SIGTERM', () => { saveDb(); process.exit(); });
+process.on('beforeExit', () => saveDb());
 
 function prepare(sql) {
   return {

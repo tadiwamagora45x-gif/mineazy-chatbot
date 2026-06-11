@@ -1,15 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, FileText, Ticket, MessageSquare,
-  Settings, LogOut, Menu, X, ChevronDown, User,
+  Settings, LogOut, Menu, X, User, Bell, ShoppingCart,
 } from 'lucide-react';
+import api from '../api';
 
 export default function Layout() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [notifications, setNotifications] = useState({ openTickets: 0, newQuotes: 0 });
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isAdmin = user.role === 'admin';
+
+  useEffect(() => {
+    const fetchNotifications = () => {
+      api.getNotifications().then(setNotifications).catch(() => {});
+    };
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    const handleClear = () => fetchNotifications();
+    window.addEventListener('data-cleared', handleClear);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('data-cleared', handleClear);
+    };
+  }, []);
 
   const logout = () => {
     localStorage.removeItem('token');
@@ -17,14 +33,18 @@ export default function Layout() {
     navigate('/login');
   };
 
-  const navItems = [
+  const allNavItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/products', icon: Package, label: 'Products' },
-    { to: '/quotations', icon: FileText, label: 'Quotations' },
-    { to: '/tickets', icon: Ticket, label: 'Tickets' },
+    { to: '/orders', icon: ShoppingCart, label: 'Orders' },
+    { to: '/quotations', icon: FileText, label: 'Quotations', badge: notifications.newQuotes },
+    { to: '/tickets', icon: Ticket, label: 'Tickets', badge: notifications.openTickets },
     { to: '/conversations', icon: MessageSquare, label: 'Conversations' },
-    { to: '/settings', icon: Settings, label: 'Settings' },
   ];
+
+  if (isAdmin) {
+    allNavItems.push({ to: '/settings', icon: Settings, label: 'Settings' });
+  }
 
   return (
     <div className="flex h-screen bg-surface-900 text-white overflow-hidden">
@@ -49,7 +69,7 @@ export default function Layout() {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {navItems.map(({ to, icon: Icon, label }) => (
+          {allNavItems.map(({ to, icon: Icon, label, badge }) => (
             <NavLink
               key={to}
               to={to}
@@ -64,7 +84,10 @@ export default function Layout() {
               }
             >
               <Icon className="w-[18px] h-[18px] flex-shrink-0" />
-              <span>{label}</span>
+              <span className="flex-1">{label}</span>
+              {badge > 0 && (
+                <span className="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-red-500 text-white rounded-full">{badge > 99 ? '99+' : badge}</span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -77,7 +100,7 @@ export default function Layout() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-white truncate">{user.name || 'Admin'}</p>
-              <p className="text-[11px] text-mute-dark truncate">{user.email}</p>
+              <p className="text-[11px] text-mute-dark truncate">{user.role === 'sales' ? 'Sales Rep' : 'Admin'}</p>
             </div>
             <button onClick={logout} className="p-1.5 hover:bg-white/[0.05] rounded-lg text-mute-dark hover:text-red-400 transition-colors">
               <LogOut className="w-3.5 h-3.5" />
@@ -108,6 +131,16 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center gap-4">
+            {(notifications.openTickets > 0 || notifications.newQuotes > 0) && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/20">
+                <Bell className="w-3.5 h-3.5 text-red-400" />
+                <span className="text-xs font-medium text-red-400">
+                  {notifications.openTickets > 0 && `${notifications.openTickets} ticket${notifications.openTickets > 1 ? 's' : ''}`}
+                  {notifications.openTickets > 0 && notifications.newQuotes > 0 && ' • '}
+                  {notifications.newQuotes > 0 && `${notifications.newQuotes} quote${notifications.newQuotes > 1 ? 's' : ''}`}
+                </span>
+              </div>
+            )}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>

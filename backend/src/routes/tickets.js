@@ -51,7 +51,7 @@ router.put('/:id', (req, res) => {
       description = COALESCE(?, description),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?`
-  ).run(status, priority, assigned_to, description, req.params.id);
+  ).run(status || null, priority || null, assigned_to || null, description || null, req.params.id);
 
   res.json({ message: 'Ticket updated' });
 });

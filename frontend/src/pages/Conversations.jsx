@@ -1,18 +1,26 @@
-import { useState, useEffect } from 'react';
-import { MessageSquare, User, ChevronRight } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { MessageSquare, User, Send } from 'lucide-react';
 import api from '../api';
 
 export default function Conversations() {
   const [conversations, setConversations] = useState([]);
   const [selected, setSelected] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [replyText, setReplyText] = useState('');
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef(null);
 
   useEffect(() => {
     api.getConversations().then(setConversations).catch(console.error);
   }, []);
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
   const viewConversation = async (conv) => {
     setSelected(conv);
+    setReplyText('');
     const data = await api.getConversation(conv.id);
     setMessages(data.messages || []);
   };
@@ -22,6 +30,28 @@ export default function Conversations() {
     await api.updateConversation(conv.id, { status: newStatus });
     api.getConversations().then(setConversations).catch(console.error);
     if (selected?.id === conv.id) setSelected({ ...selected, status: newStatus });
+  };
+
+  const handleSend = async () => {
+    if (!replyText.trim() || !selected?.customer_phone) return;
+    const phone = selected.customer_phone.replace(/\D/g, '');
+    setSending(true);
+    try {
+      await api.sendMessage(phone, replyText.trim());
+      const data = await api.getConversation(selected.id);
+      setMessages(data.messages || []);
+      setReplyText('');
+    } catch (e) {
+      alert('Failed to send: ' + e.message);
+    }
+    setSending(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   return (
@@ -47,7 +77,9 @@ export default function Conversations() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="font-semibold text-sm text-white truncate">{c.customer_name || c.customer_phone || 'Unknown'}</p>
+                    <p className="font-semibold text-sm text-white truncate">
+                      {c.customer_name || c.customer_phone || 'Unknown'}
+                    </p>
                     <span className="flex-shrink-0">
                       <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
                         c.status === 'active' ? 'bg-green-500/10 text-green-400' : 'bg-white/5 text-mute-dark'
@@ -85,6 +117,7 @@ export default function Conversations() {
                 {selected.status === 'active' ? 'Active — Click to close' : 'Closed — Click to reopen'}
               </button>
             </div>
+
             <div className="flex-1 overflow-auto p-4 space-y-3">
               {messages.map(m => (
                 <div key={m.id} className={`flex ${m.direction === 'incoming' ? 'justify-start' : 'justify-end'}`}>
@@ -100,12 +133,34 @@ export default function Conversations() {
                   </div>
                 </div>
               ))}
+              <div ref={messagesEndRef} />
               {messages.length === 0 && (
                 <div className="text-center py-16">
                   <MessageSquare className="w-8 h-8 text-mute-dark mx-auto mb-2 opacity-40" />
                   <p className="text-mute-dark text-sm">No messages</p>
                 </div>
               )}
+            </div>
+
+            {/* Reply input */}
+            <div className="px-4 py-3 border-t border-white/[0.04] flex gap-3 flex-shrink-0">
+              <input
+                type="text"
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Type a reply... (sent via WhatsApp)"
+                className="flex-1 glass-input text-sm"
+                disabled={sending}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!replyText.trim() || sending}
+                className="btn-primary inline-flex items-center gap-2 px-4 disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+                {sending ? '...' : 'Send'}
+              </button>
             </div>
           </>
         ) : (

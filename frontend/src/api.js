@@ -68,6 +68,16 @@ export const api = {
 
   getSettings: () => request('/settings'),
   updateSettings: (data) => request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
+
+  getUsers: () => request('/users'),
+  createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
+  deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
+
+  getNotifications: () => request('/notifications'),
+
+  sendMessage: (phone, message) => request('/messages/send', { method: 'POST', body: JSON.stringify({ phone, message }) }),
+
+  clearData: (table) => request('/admin/clear', { method: 'POST', body: JSON.stringify({ table }) }),
 };
 
 export default api;

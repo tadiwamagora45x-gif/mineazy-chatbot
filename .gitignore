@@ -2,5 +2,14 @@ node_modules/
 dist/
 auth_info/
 mineazy.db
+mineazy.db.backup
+import_data.txt
+import_data_append.txt
+debug_api.mjs
+check_products.mjs
+clear_products.mjs
+import_products.mjs
+parse_products.mjs
+test_settings.mjs
 .env
 *.log
