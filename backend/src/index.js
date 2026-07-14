@@ -102,6 +102,10 @@ async function start() {
   const c = prepare('SELECT COUNT(*) as count FROM products').get().count;
   console.log(`Database initialized with ${c} products`);
 
+  // Sync products from ERP
+  const { syncProductsFromERP } = await import('./sync-erp-products.js');
+  await syncProductsFromERP();
+
   try {
     const { startWhatsApp, setQRCallback } = await import('./whatsapp.js');
     const { initGemini } = await import('./gemini.js');
@@ -113,15 +117,20 @@ async function start() {
       console.log('Install Baileys with: npm install @whiskeysockets/baileys pino @hapi/boom');
     });
 
-    setQRCallback((data) => {
+    setQRCallback(async (data) => {
       if (data.type === 'qr') {
-        import('qrcode-terminal').then(qr => {
+        const { writeFileSync } = await import('fs');
+        writeFileSync('./qr-code.txt', data.qr);
+        console.log('\n========================================');
+        console.log('  QR CODE READY - Scan with WhatsApp');
+        console.log('========================================');
+        console.log('\nCopy the string below and paste at https://www.qr-code-generator.com to get a QR image:\n');
+        console.log(data.qr);
+        console.log('\n(QR string also saved to backend/qr-code.txt)\n');
+        try {
+          const qr = await import('qrcode-terminal');
           qr.default.generate(data.qr, { small: true });
-          console.log('\nScan the QR code above with WhatsApp (Linked Devices)');
-        }).catch(() => {
-          console.log('\nQR Code received. Copy this string to a QR generator:\n');
-          console.log(data.qr);
-        });
+        } catch (e) { /* terminal QR display failed, string fallback above */ }
       } else if (data.type === 'connected') {
         console.log('WhatsApp connected!');
       }

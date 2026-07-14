@@ -1,6 +1,7 @@
 import express from 'express';
 import { prepare } from '../db.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { sendQuotationToERP } from '../erp.js';
 
 const router = express.Router();
 
@@ -44,6 +45,9 @@ router.put('/:id', async (req, res) => {
   prepare(
     'UPDATE quotation_requests SET status = COALESCE(?, status), notes = COALESCE(?, notes), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
   ).run(status || null, notes || null, req.params.id);
+
+  // Forward update to ERP
+  sendQuotationToERP(req.params.id);
 
   // If marked as completed, send receipt to customer
   if (status === 'completed') {

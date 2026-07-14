@@ -13,3 +13,6 @@ parse_products.mjs
 test_settings.mjs
 .env
 *.log
+qr-code.txt
+backend-log.txt
+qr.html

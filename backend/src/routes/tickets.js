@@ -1,6 +1,7 @@
 import express from 'express';
 import { prepare } from '../db.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { sendTicketToERP } from '../erp.js';
 
 const router = express.Router();
 
@@ -52,6 +53,8 @@ router.put('/:id', (req, res) => {
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?`
   ).run(status || null, priority || null, assigned_to || null, description || null, req.params.id);
+
+  sendTicketToERP(req.params.id);
 
   res.json({ message: 'Ticket updated' });
 });

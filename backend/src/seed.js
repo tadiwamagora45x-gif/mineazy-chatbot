@@ -46,10 +46,26 @@ const seed = async () => {
 
   const insertSetting = prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
   insertSetting.run('company_name', 'MineAzy Mining Solutions');
-  insertSetting.run('company_phone', '+260 97 1234567');
-  insertSetting.run('company_email', 'info@mineazy.com');
-  insertSetting.run('company_address', 'Plot 1234, Kitwe, Zambia');
+  insertSetting.run('company_phone', '+263 71 229 0046');
+  insertSetting.run('company_email', 'sales@mineazy.co.zw');
+  insertSetting.run('company_address', '15 Plumtree Road, Belmont, Bulawayo');
   insertSetting.run('business_hours', 'Mon-Fri 8am-5pm, Sat 8am-12pm');
+  insertSetting.run('company_tin', '2001282270');
+  insertSetting.run('company_vat', '220107408');
+  insertSetting.run('company_tagline', 'Your Trusted Mining & Industrial Supplier');
+  insertSetting.run('company_description', 'Leading supplier of mining equipment, spare parts, and industrial solutions.');
+  insertSetting.run('branches', JSON.stringify([
+    { name: 'Lusaka', city: 'Lusaka', area: 'Lusaka', address: 'Lusaka, Zambia', phone: '+260 97 123 4567' },
+    { name: 'Esigodini', city: 'Esigodini', area: 'Esigodini', address: 'Esigodini, Zimbabwe', phone: '+263 78 200 1001' },
+    { name: 'Mberengwa', city: 'Mberengwa', area: 'Mberengwa', address: 'Mberengwa, Zimbabwe', phone: '+263 78 200 1002' },
+    { name: 'Livingstone', city: 'Livingstone', area: 'Livingstone', address: 'Livingstone, Zambia', phone: '+260 97 200 2001' },
+    { name: 'Zvishavane', city: 'Zvishavane', area: 'Zvishavane', address: 'Zvishavane, Zimbabwe', phone: '+263 78 200 1003' },
+    { name: 'Ndola', city: 'Ndola', area: 'Ndola', address: 'Ndola, Zambia', phone: '+260 97 200 2002' },
+    { name: 'Gweru', city: 'Gweru', area: 'Gweru', address: 'Gweru, Zimbabwe', phone: '+263 78 200 1004' },
+    { name: 'Filabusi', city: 'Filabusi', area: 'Filabusi', address: 'Filabusi, Zimbabwe', phone: '+263 78 200 1005' },
+    { name: 'Gwanda', city: 'Gwanda', area: 'Gwanda', address: 'Gwanda, Zimbabwe', phone: '+263 78 200 1006' },
+    { name: 'Bulawayo', city: 'Bulawayo', area: 'Bulawayo', address: 'Bulawayo, Zimbabwe', phone: '+263 78 200 1007' },
+  ]));
 
   saveDb();
   console.log('Database seeded successfully!');

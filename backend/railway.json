@@ -1,0 +1,12 @@
+{
+  "build": {
+    "builder": "nixpacks",
+    "buildCommand": "cd .. && npm run frontend:build"
+  },
+  "deploy": {
+    "startCommand": "node src/index.js",
+    "healthcheckPath": "/api/health",
+    "restartPolicyType": "always",
+    "numReplicas": 1
+  }
+}

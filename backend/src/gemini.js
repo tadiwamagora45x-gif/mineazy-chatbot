@@ -202,27 +202,44 @@ export async function getAIResponse(userMessage) {
   const msg = userMessage.trim();
   const msgLower = msg.toLowerCase();
 
-  // Check for human escalation first
+  // ---- 1. Human escalation ----
   const escalateWords = ['human', 'agent', 'salesperson', 'speak to someone', 'talk to', 'real person'];
   if (escalateWords.some(w => msgLower.includes(w))) {
-    return "I'll connect you with a member of our sales team right away. A representative will be with you shortly. HUMAN_NEEDED";
+    return {
+      text: "I'm redirecting you to a human representative now. One of our sales team members will assist you shortly. Thank you for your patience!",
+      action: 'escalate',
+    };
   }
 
-  // Search products
-  const { results, suggestion } = searchProducts(msg);
-
-  // Check for quotation intent
-  const quoteWords = ['quote', 'quotation', 'price', 'how much', 'cost', 'buy', 'purchase', 'order'];
-  const wantsQuote = quoteWords.some(w => msgLower.includes(w));
-
-  // Check for greetings or company info requests
-  const infoWords = ['who are you', 'about', 'location', 'address', 'hours', 'contact', 'phone number', 'email', 'where are you', 'company info', 'business hours', 'open'];
-  if (msgLower.match(/^(hi|hey|hello|good morning|good afternoon|good evening)\b/) || infoWords.some(w => msgLower.includes(w))) {
+  // ---- 2. Company info / location / hours ----
+  const infoWords = ['who are you', 'about', 'location', 'address', 'hours', 'contact', 'phone number', 'email', 'where are you', 'where you located', 'where are you located', 'company info', 'business hours', 'open', 'branch', 'branches', 'ranch'];
+  const greetingPattern = /^(hi|hey|hello|good morning|good afternoon|good evening|howdy|yo|sup|heyy|hii|hallo|helo)\b/;
+  if (greetingPattern.test(msgLower) || infoWords.some(w => msgLower.includes(w))) {
     const c = getCompanyInfo();
-    if (msgLower.match(/^(hi|hey|hello|good morning|good afternoon|good evening)\b/) && !infoWords.some(w => msgLower.includes(w))) {
-      return `Welcome to ${c.company_name || 'Mineazy Chatbot'}! I can help you find hardware and industrial supplies, check prices and availability, or prepare a quotation. What are you looking for today?`;
+    if (greetingPattern.test(msgLower)) {
+      const greetings = [
+        `Hello! 👋 Welcome to *${c.company_name || 'Mineazy'}*! How can I help you today? I can find products, check prices and stock, or prepare a quotation for you.`,
+        `Hey there! 😊 You're chatting with *${c.company_name || 'Mineazy'}*. Looking for hardware or industrial supplies? Just tell me what you need!`,
+        `Hi! 👋 Welcome to *${c.company_name || 'Mineazy'}*! What can I help you find today?`,
+        `Good to hear from you! 😊 I'm the Mineazy assistant — I can help with product info, pricing, stock checks, and quotations. What are you looking for?`,
+      ];
+      const random = greetings[Math.floor(Math.random() * greetings.length)];
+      const hasInfoWord = infoWords.some(w => msgLower.includes(w));
+      if (hasInfoWord) {
+        // They said hi + info question, show both
+        const c2 = getCompanyInfo();
+        const infoParts = [];
+        if (c2.company_name) infoParts.push(`*${c2.company_name}*`);
+        if (c2.company_tagline) infoParts.push(`_${c2.company_tagline}_`);
+        if (c2.company_description) infoParts.push(c2.company_description);
+        if (c2.company_phone) infoParts.push(`📞 Phone: ${c2.company_phone}`);
+        if (c2.company_email) infoParts.push(`📧 Email: ${c2.company_email}`);
+        if (c2.company_address) infoParts.push(`📍 Address: ${c2.company_address}`);
+        if (c2.business_hours) infoParts.push(`🕐 Hours: ${c2.business_hours}`);
+        return { text: `${random}\n\n${infoParts.join('\n')}`, action: 'info' };
+      }
+      return { text: random, action: 'chat' };
     }
-    // Company info response
     const infoParts = [];
     if (c.company_name) infoParts.push(`*${c.company_name}*`);
     if (c.company_tagline) infoParts.push(`_${c.company_tagline}_`);
@@ -231,57 +248,84 @@ export async function getAIResponse(userMessage) {
     if (c.company_email) infoParts.push(`Email: ${c.company_email}`);
     if (c.company_address) infoParts.push(`Address: ${c.company_address}`);
     if (c.business_hours) infoParts.push(`Hours: ${c.business_hours}`);
-    return infoParts.join('\n');
+    return { text: infoParts.join('\n'), action: 'info' };
   }
 
-  // If we have matching products, use Gemini or fallback
-  if (results.length > 0) {
-    const intro = suggestion || `Here is what I found:`;
-
-    if (model) {
-      const productLines = results.slice(0, 6).map((p, i) => {
-        const displayName = p.cleanName || p.name.replace(/^[A-Z0-9]+ - /, '').replace(/^[A-Z0-9]+\s+-\s+/, '');
-        return `${i + 1}. ${displayName} | Price: $${p.price.toFixed(2)} | Stock: ${p.stock}`;
-      }).join('\n');
-
-      const prompt = `${buildSystemPrompt()}\n\nAvailable matching products:\n${productLines}\n\n${results.length > 6 ? `(${results.length} total matches, showing top 6)` : ''}\n\nCustomer message: "${msg}"\n\nAssistant:`;
-
-      try {
-        const result = await model.generateContent(prompt);
-        return result.response.text();
-      } catch (e) {
-        console.error('Gemini error:', e.message);
+  // ---- 3. Stock inquiry: "how many X do you have" ----
+  const stockPatterns = [
+    /(?:how many|how much|what('?s| is) the stock|stock (?:of|for|on)|do you (?:have|stock|sell)) (.+?)(?:\?|$)/i,
+    /(?:what is|what's) the (?:stock|availability) (?:of|for) (.+?)(?:\?|$)/i,
+  ];
+  for (const pattern of stockPatterns) {
+    const m = msg.match(pattern);
+    if (m) {
+      const query = m[2] || m[1];
+      const { results } = searchProducts(query);
+      if (results.length > 0) {
+        const p = results[0];
+        return {
+          text: `*${p.cleanName}*\n\nPRICE: $${p.price.toFixed(2)}\nSTOCK: ${p.stock} units available`,
+          action: 'product_list',
+        };
       }
+      return { text: `I couldn't find stock info for "${query.trim()}". Try a different search or type *human* for help.`, action: 'chat' };
     }
+  }
 
-    // Fallback: format product results cleanly with numbering
+  // ---- 4. Purchase intent: "i want X", "can i have X", "i need X" ----
+  const buyPatterns = [
+    /(?:i\s*(?:want|need|would like|'d like|am looking for|m looking for)|can i\s*(?:have|get|order|buy|purchase)|i'm interested in)\s+(.+)/i,
+  ];
+  for (const pattern of buyPatterns) {
+    const m = msg.match(pattern);
+    if (m) {
+      const query = m[1].replace(/[?.!]+$/g, '').trim();
+      const { results } = searchProducts(query);
+      if (results.length > 0) {
+        const p = results[0];
+        return {
+          text: `*${p.cleanName}*\nPrice: $${p.price.toFixed(2)} | Stock: ${p.stock} units\n\nHow many would you like?`,
+          action: 'buy',
+          product: { name: p.cleanName, price: p.price, stock: p.stock },
+        };
+      }
+      return { text: `I couldn't find "${query.trim()}" in our catalog. Can you check the spelling or try a different name?`, action: 'chat' };
+    }
+  }
+
+  // ---- 5. Product search (fallback) ----
+  const { results, suggestion } = searchProducts(msg);
+  const wantsQuote = ['quote', 'quotation', 'price', 'how much', 'cost', 'buy', 'purchase', 'order'].some(w => msgLower.includes(w));
+
+  if (results.length > 0) {
     const top = results.slice(0, 4);
-    let response = `${intro}\n\n`;
+    let text = suggestion || 'Here is what I found:\n\n';
     top.forEach((p, i) => {
-      const name = p.cleanName || p.name.replace(/^[A-Z0-9]+ - /, '').replace(/^[A-Z0-9]+\s+-\s+/, '');
-      response += `${i + 1}. *${name}*\nPRICE: $${p.price.toFixed(2)}\nSTOCK: ${p.stock} units\n\n`;
+      const name = p.cleanName || p.name;
+      text += `${i + 1}. *${name}*\nPRICE: $${p.price.toFixed(2)}\nSTOCK: ${p.stock} units\n\n`;
     });
     if (results.length > 4) {
-      response += `...and more matches. Can you be more specific?`;
+      text += `...and more matches. Can you be more specific?`;
+    } else if (wantsQuote) {
+      text += `Would you like a quotation? Type how many you want.`;
     } else {
-      response += `Would you like a quotation on any of these?`;
+      text += `To order, just tell me how many you want.`;
     }
-    if (wantsQuote) response += '\n\nQUOTE_REQUEST';
-    return response;
+    return { text, action: 'product_list' };
   }
 
-  // No products found
+  // ---- 6. No products found ----
   if (model) {
     const prompt = `${buildSystemPrompt()}\n\nCustomer message: "${msg}"\n\nNo products were found matching this query in the catalog. Respond helpfully and ask them to be more specific or try different keywords.`;
     try {
       const result = await model.generateContent(prompt);
-      return result.response.text();
+      return { text: result.response.text(), action: 'chat' };
     } catch (e) {
       console.error('Gemini error:', e.message);
     }
   }
 
-  return "I couldn't find that in our catalog. Could you check the spelling or try different keywords? Type 'human' to speak with a sales representative.";
+  return { text: "I couldn't find that in our catalog. Could you check the spelling or try different keywords? Type *human* to speak with a sales representative.", action: 'chat' };
 }
 
 export function extractQuoteInfo(messages) {
